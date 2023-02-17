@@ -1,0 +1,14 @@
+{
+    "F4939FEFC47E:10.0.50.2/32": {
+        "action_type": "vnet",
+        "vnet": "Vnet0000000"
+    },
+    "F4939FEFC47E:10.0.50.3/32": {
+        "action_type": "vnet",
+        "vnet": "Vnet0000001"
+    },
+    "F4939FEFC47E:10.0.50.4/32": {
+        "action_type": "vnet",
+        "vnet": "Vnet0000002"
+    }
+}
