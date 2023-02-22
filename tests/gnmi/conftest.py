@@ -1,4 +1,5 @@
 import pytest
+import logging
 import shutil
 
 from tests.common.helpers.assertions import pytest_require as pyrequire
@@ -7,6 +8,8 @@ from tests.gnmi.helper import GNMI_CONTAINER_NAME, apply_cert_config, create_ext
 from tests.generic_config_updater.gu_utils import create_checkpoint, rollback
 
 SETUP_ENV_CP = "test_setup_checkpoint"
+
+logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="function", autouse=True)
@@ -22,6 +25,7 @@ def skip_non_x86_platform(duthosts, rand_one_dut_hostname):
 
 @pytest.fixture(scope="module", autouse=True)
 def download_gnmi_client(duthosts, rand_one_dut_hostname, localhost):
+    logger.warning("download_gnmi_client")
     duthost = duthosts[rand_one_dut_hostname]
     for file in ["gnmi_cli", "gnmi_set", "gnmi_get", "gnoi_client"]:
         duthost.shell("docker cp %s:/usr/sbin/%s /tmp" % (GNMI_CONTAINER_NAME, file))
@@ -37,6 +41,7 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
     Create GNMI client certificates
     '''
     duthost = duthosts[rand_one_dut_hostname]
+    logger.warning("setup_gnmi_server")
 
     # Check if GNMI is enabled on the device
     pyrequire(
@@ -46,6 +51,7 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
     # Create Root key
     local_command = "openssl genrsa -out gnmiCA.key 2048"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Create Root cert
     local_command = "openssl req \
@@ -58,10 +64,12 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
                         -subj '/CN=test.gnmi.sonic' \
                         -out gnmiCA.pem"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Create server key
     local_command = "openssl genrsa -out gnmiserver.key 2048"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Create server CSR
     local_command = "openssl req \
@@ -70,6 +78,7 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
                         -subj '/CN=test.server.gnmi.sonic' \
                         -out gnmiserver.csr"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Sign server certificate
     create_ext_conf(duthost.mgmt_ip, "extfile.cnf")
@@ -84,10 +93,14 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
                         -sha256 \
                         -extensions req_ext -extfile extfile.cnf"
     localhost.shell(local_command)
+    logger.warning(local_command)
+
+    
 
     # Create client key
     local_command = "openssl genrsa -out gnmiclient.key 2048"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Create client CSR
     local_command = "openssl req \
@@ -96,6 +109,7 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
                         -subj '/CN=test.client.gnmi.sonic' \
                         -out gnmiclient.csr"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Sign client certificate
     local_command = "openssl x509 \
@@ -108,6 +122,7 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
                         -days 825 \
                         -sha256"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Copy CA certificate and server certificate over to the DUT
     duthost.copy(src='gnmiCA.pem', dest='/etc/sonic/telemetry/')
@@ -125,6 +140,7 @@ def setup_gnmi_server(duthosts, rand_one_dut_hostname, localhost):
                         gnmiserver.* \
                         gnmiclient.*"
     localhost.shell(local_command)
+    logger.warning(local_command)
 
     # Rollback configuration
     rollback(duthost, SETUP_ENV_CP)

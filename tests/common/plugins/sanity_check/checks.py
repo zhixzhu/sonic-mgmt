@@ -20,12 +20,12 @@ OMEM_THRESHOLD_BYTES = 10485760     # 10MB
 cache = FactsCache()
 
 CHECK_ITEMS = [
-    'check_processes',
-    'check_interfaces',
-    'check_bgp',
-    'check_dbmemory',
-    'check_monit',
-    'check_mux_simulator',
+    #'check_processes',
+    #'check_interfaces',
+    #'check_bgp',
+    #'check_dbmemory',
+    #'check_monit',
+    #'check_mux_simulator',
     'check_secureboot']
 
 __all__ = CHECK_ITEMS

@@ -3,7 +3,7 @@ import logging
 import pytest
 import re
 
-from helper import gnmi_set, gnmi_get, gnoi_reboot
+from helper import gnmi_set, apply_cert_config
 from tests.common.helpers.assertions import pytest_assert
 from tests.common.utilities import wait_until
 from tests.common.platform.processes_utils import wait_critical_processes
@@ -19,11 +19,34 @@ pytestmark = [
 def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, localhost):
     '''
     Verify GNMI create vnet route performance
+
+    sudo ./run_tests.sh -n vms-kvm-t0 -d vlab-01 -c gnmi/test_gnmi_vnet_performance.py -f vtestbed.csv -i veos_vtb -u  -S 'sub_port_interfaces platform_tests copp show_techport acl everflow drop_packets' -e '--allow_recover --showlocals --assert plain -rav --collect_techsupport=False --deep_clean --sad_case_list=sad_bgp,sad_lag_member,sad_lag,sad_vlan_port'
     '''
     duthost = duthosts[rand_one_dut_hostname]
     file_name = "vnetroute.json"
-    update_list = ["/sonic-db:APPL_DB/DASH_ROUTE_TABLE/：@%s" % (file_name)]
+    update_list = ["/sonic-db:APPL_DB/DASH_ROUTE_TABLE/:@%s" % (file_name)]
+
+    # generate config file
+    with open(file_name, 'w') as file:
+        file.write("{")
+
+        route_id = 0
+        while (route_id < 128):
+            file.write('"F4939FEFC47E:10.0.50.{}/32": {{'.format(route_id))
+            file.write('"action_type": "vnet",')
+            file.write('"vnet": "Vnet0000{}"'.format(route_id))
+            file.write('},')
+            route_id += 1
+
+        # write last route
+        file.write('"F4939FEFC47E:10.0.50.{}/32": {{'.format(route_id))
+        file.write('"action_type": "vnet",')
+        file.write('"vnet": "Vnet0000{}"'.format(route_id))
+        file.write('}')
+
+        file.write("}")
 
     ret, msg = gnmi_set(duthost, localhost, [], update_list, [])
+    logger.info("gnmi msg: %s", msg)
     assert ret == 0, msg
 

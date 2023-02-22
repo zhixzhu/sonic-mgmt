@@ -1,17 +1,19 @@
 import time
 import re
+import logging
 
-GNMI_CONTAINER_NAME = 'telemetry'
-GNMI_PROGRAM_NAME = 'telemetry'
-GNMI_CONFIG_KEY = 'TELEMETRY|gnmi'
+GNMI_CONTAINER_NAME = 'gnmi'
+GNMI_PROGRAM_NAME = 'gnmi-native'
+GNMI_CONFIG_KEY = 'GNMI|gnmi'
 # Wait 15 seconds after starting GNMI server
 GNMI_SERVER_START_WAIT_TIME = 15
 
+logger = logging.getLogger(__name__)
 
 def gnmi_port(duthost):
-    port = duthost.shell("redis-cli -n 4 hget '%s' 'port'" % GNMI_CONFIG_KEY)['stdout']
-    return port
-
+    #port = duthost.shell("redis-cli -n 4 hget '%s' 'port'" % GNMI_CONFIG_KEY)['stdout']
+    #return port
+    return 50052
 
 def create_ext_conf(ip, filename):
     text = '''
@@ -36,8 +38,9 @@ def apply_cert_config(duthost):
     dut_command = "docker exec %s bash -c " % GNMI_CONTAINER_NAME
     dut_command += "\"/usr/bin/nohup /usr/sbin/telemetry -logtostderr --port %s " % port
     dut_command += "--server_crt /etc/sonic/telemetry/gnmiserver.crt --server_key /etc/sonic/telemetry/gnmiserver.key "
-    dut_command += "--ca_crt /etc/sonic/telemetry/gnmiCA.pem -gnmi_native_write=true -v=10 >/root/gnmi.log 2>&1 &\""
+    dut_command += "--ca_crt /etc/sonic/telemetry/gnmiCA.pem -gnmi_native_write=true  -v=10 >/root/gnmi.log 2>&1 &\""
     duthost.shell(dut_command)
+    logger.warning("set cert commands: %s", dut_command)
     time.sleep(GNMI_SERVER_START_WAIT_TIME)
 
 
@@ -57,7 +60,7 @@ def gnmi_set(duthost, localhost, delete_list, update_list, replace_list):
     ip = duthost.mgmt_ip
     port = gnmi_port(duthost)
     cmd = "gnmi/gnmi_set -target_addr %s:%s " % (ip, port)
-    cmd += "-alsologtostderr -cert ./gnmiclient.crt -key ./gnmiclient.key -ca ./gnmiCA.pem -time_out 60s"
+    cmd += "-alsologtostderr -cert ./gnmiclient.crt -key ./gnmiclient.key -ca ./gnmiCA.pem -time_out 60s -xpath_target MIXED"
     for delete in delete_list:
         cmd += " -delete " + delete
     for update in update_list:
@@ -65,6 +68,11 @@ def gnmi_set(duthost, localhost, delete_list, update_list, replace_list):
     for replace in replace_list:
         cmd += " -replace " + replace
     output = localhost.shell(cmd, module_ignore_errors=True)
+    logger.warning("gnmi command: %s", cmd)
+    
+    localhost.shell("cp ./gnmiclient.crt /data/sonic-mgmt/gnmiclient.crt", module_ignore_errors=True)
+    localhost.shell("cp ./gnmiclient.key /data/sonic-mgmt/gnmiclient.key", module_ignore_errors=True)
+    localhost.shell("cp ./gnmiCA.pem /data/sonic-mgmt/gnmiCA.pem", module_ignore_errors=True)
     if output['stderr']:
         return -1, output['stderr']
     else:
