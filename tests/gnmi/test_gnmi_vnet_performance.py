@@ -19,11 +19,11 @@ pytestmark = [
 ]
 
 
-def create_route_address(id):
+def create_route_address(first_addr, id):
     address_1 = id % 100
     address_2 = (int(id / 100)) % 100
     address_3 = (int(id / 10000)) % 100
-    return "10.{}.{}.{}/32".format(address_3, address_2, address_1)
+    return "{}.{}.{}.{}/32".format(first_addr, address_3, address_2, address_1)
 
 
 def create_mapping_address(id):
@@ -147,9 +147,8 @@ def create_eni(duthost, localhost):
     logger.info("gnmi msg: %s", msg)
     assert ret == 0, msg
 
-def create_vnet_route(duthost, localhost, entry_count):
-    file_name = "vnetroute.json"
-    update_list = ["/sonic-db:APPL_DB/DASH_ROUTE_TABLE/:@%s" % (file_name)]
+def create_vnet_route_json(first_addr, entry_count):
+    file_name = "vnetroute_{}.json".format(first_addr)
 
     # generate config file
     route_count = entry_count
@@ -158,7 +157,7 @@ def create_vnet_route(duthost, localhost, entry_count):
 
         route_id = 1
         while (route_id < route_count + 1):
-            file.write('"F4939FEFC47E:{}": {{'.format(create_route_address(route_id)))
+            file.write('"F4939FEFC47E:{}": {{'.format(create_route_address(first_addr, route_id)))
             file.write('"action_type": "vnet",')
             file.write('"vnet": "Vnet001"')
             if (route_id == route_count):
@@ -168,7 +167,10 @@ def create_vnet_route(duthost, localhost, entry_count):
             route_id += 1
 
         file.write("}")
-
+    
+def create_vnet_route(duthost, localhost, first_addr):
+    file_name = "vnetroute_{}.json".format(first_addr)
+    update_list = ["/sonic-db:APPL_DB/DASH_ROUTE_TABLE/:@%s" % (file_name)]
     ret, msg = gnmi_set(duthost, localhost, [], update_list, [])
     logger.info("gnmi msg: %s", msg)
     assert ret == 0, msg
@@ -181,7 +183,6 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
     sudo ./run_tests.sh -n vms-kvm-t0 -d vlab-01 -c gnmi/test_gnmi_vnet_performance.py -f vtestbed.csv -i veos_vtb -u  -S 'sub_port_interfaces platform_tests copp show_techport acl everflow drop_packets' -e '--allow_recover --showlocals --assert plain -rav --collect_techsupport=False --deep_clean --sad_case_list=sad_bgp,sad_lag_member,sad_lag,sad_vlan_port'
     '''
     duthost = duthosts[rand_one_dut_hostname]
-    entry_count = 100
 
     create_appliance(duthost, localhost)
     create_vnet(duthost, localhost)
@@ -195,4 +196,14 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
 
     # wait depency data ready
     time.sleep(10)
-    create_vnet_route(duthost, localhost, entry_count)
+
+    entry_count = 1000
+    first_addr = 1
+    while (first_addr < 101):
+        create_vnet_route_json(first_addr, entry_count)
+        first_addr += 1
+
+    first_addr = 1
+    while (first_addr < 101):
+        create_vnet_route(duthost, localhost, first_addr)
+        first_addr += 1
