@@ -26,6 +26,33 @@ def create_route_address(id):
     return "10.{}.{}.{}/32".format(address_3, address_2, address_1)
 
 
+def create_mapping_address(id):
+    address_1 = id % 100
+    address_2 = (int(id / 100)) % 100
+    address_3 = (int(id / 10000)) % 100
+    return "10.{}.{}.{}".format(address_3, address_2, address_1)
+
+
+def create_appliance(duthost, localhost):
+    file_name = "appliance.json"
+    update_list = ["/sonic-db:APPL_DB/DASH_APPLIANCE_TABLE/:@%s" % (file_name)]
+
+    # generate config file
+    with open(file_name, 'w') as file:
+        file.write("{")
+
+        file.write('"123": {')
+        file.write('"sip": "10.1.0.32",')
+        file.write('"vm_vni": "4321"')
+        file.write('}')
+
+        file.write("}")
+
+    ret, msg = gnmi_set(duthost, localhost, [], update_list, [])
+    logger.info("gnmi msg: %s", msg)
+    assert ret == 0, msg
+
+
 def create_vnet(duthost, localhost):
     file_name = "vnet.json"
     update_list = ["/sonic-db:APPL_DB/DASH_VNET_TABLE/:@%s" % (file_name)]
@@ -38,6 +65,35 @@ def create_vnet(duthost, localhost):
         file.write('"guid": "{}",'.format(uuid.uuid4()))
         file.write('"vni": "45654"')
         file.write('}')
+
+        file.write("}")
+
+    ret, msg = gnmi_set(duthost, localhost, [], update_list, [])
+    logger.info("gnmi msg: %s", msg)
+    assert ret == 0, msg
+
+
+def create_vnet_mapping(duthost, localhost, entry_count):
+    file_name = "vnet_mapping.json"
+    update_list = ["/sonic-db:APPL_DB/DASH_VNET_MAPPING_TABLE/:@%s" % (file_name)]
+
+    # generate config file
+    mapping_count = entry_count
+    with open(file_name, 'w') as file:
+        file.write("{")
+
+        mapping_id = 1
+        while (mapping_id < mapping_count + 1):
+            file.write('"Vnet001:{}": {{'.format(create_mapping_address(mapping_id)))
+            file.write('"routing_type":"vnet_encap",')
+            file.write('"underlay_ip":"101.1.2.3",')
+            file.write('"mac_address":"F9-22-83-99-22-A2"')
+
+            if (mapping_id == mapping_count):
+                file.write('}')
+            else:
+                file.write('},')
+            mapping_id += 1
 
         file.write("}")
 
@@ -125,12 +181,18 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
     sudo ./run_tests.sh -n vms-kvm-t0 -d vlab-01 -c gnmi/test_gnmi_vnet_performance.py -f vtestbed.csv -i veos_vtb -u  -S 'sub_port_interfaces platform_tests copp show_techport acl everflow drop_packets' -e '--allow_recover --showlocals --assert plain -rav --collect_techsupport=False --deep_clean --sad_case_list=sad_bgp,sad_lag_member,sad_lag,sad_vlan_port'
     '''
     duthost = duthosts[rand_one_dut_hostname]
-    entry_count = 1000
+    entry_count = 100
 
+    create_appliance(duthost, localhost)
     create_vnet(duthost, localhost)
+
+    # wait depency data ready
+    time.sleep(10)
+    create_vnet_mapping(duthost, localhost, 1)
+
     create_qos(duthost, localhost)
     create_eni(duthost, localhost)
 
-    # wait depency data ready and start create route
+    # wait depency data ready
     time.sleep(10)
     create_vnet_route(duthost, localhost, entry_count)
