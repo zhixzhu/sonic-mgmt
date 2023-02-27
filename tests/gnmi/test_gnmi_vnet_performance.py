@@ -198,12 +198,13 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
     time.sleep(10)
 
     entry_count = 1000
+    batch_count = 100
     first_addr = 1
-    while (first_addr < 101):
+    while (first_addr <= batch_count):
         create_vnet_route_json(first_addr, entry_count)
         first_addr += 1
 
     first_addr = 1
-    while (first_addr < 101):
+    while (first_addr <= batch_count):
         create_vnet_route(duthost, localhost, first_addr)
         first_addr += 1
