@@ -40,7 +40,14 @@ def create_mapping_target_address(first_addr, id):
     return "{}.{}.{}.{}".format(first_addr+100, address_3, address_2, address_1)
 
 
-def create_appliance(duthost, localhost):
+def create_appliance_address(id):
+    address_1 = id % 100
+    address_2 = (int(id / 100)) % 100
+    address_3 = (int(id / 10000)) % 100
+    return "{}.{}.{}.{}".format(10, address_3, address_2, address_1)
+
+
+def create_appliance(duthost, localhost, appliancecount):
     file_name = "appliance.json"
     update_list = ["/sonic-db:APPL_DB/DASH_APPLIANCE_TABLE/:@%s" % (file_name)]
 
@@ -48,10 +55,17 @@ def create_appliance(duthost, localhost):
     with open(file_name, 'w') as file:
         file.write("{")
 
-        file.write('"123": {')
-        file.write('"sip": "10.1.0.32",')
-        file.write('"vm_vni": "4321"')
-        file.write('}')
+        appliance_id = 1
+        while (appliance_id <= appliancecount):
+            file.write('"{}": {{'.format(appliance_id))
+            file.write('"sip": "{}",'.format(create_appliance_address(appliance_id)))
+            file.write('"vm_vni": "4{}"'.format(appliance_id))
+
+            if (appliance_id == appliancecount):
+                file.write('}')
+            else:
+                file.write('},')
+            appliance_id += 1
 
         file.write("}")
 
@@ -60,7 +74,7 @@ def create_appliance(duthost, localhost):
     assert ret == 0, msg
 
 
-def create_vnet(duthost, localhost):
+def create_vnet(duthost, localhost, vnetcount):
     file_name = "vnet.json"
     update_list = ["/sonic-db:APPL_DB/DASH_VNET_TABLE/:@%s" % (file_name)]
 
@@ -68,10 +82,17 @@ def create_vnet(duthost, localhost):
     with open(file_name, 'w') as file:
         file.write("{")
 
-        file.write('"Vnet001": {')
-        file.write('"guid": "{}",'.format(uuid.uuid4()))
-        file.write('"vni": "45654"')
-        file.write('}')
+        vnet_id = 1
+        while (vnet_id <= vnetcount):
+            file.write('"Vnet{}": {{'.format(vnet_id))
+            file.write('"guid": "{}",'.format(uuid.uuid4()))
+            file.write('"vni": "45{}"'.format(vnet_id))
+            
+            if (vnet_id == vnetcount):
+                file.write('}')
+            else:
+                file.write('},')
+            vnet_id += 1
 
         file.write("}")
 
@@ -80,7 +101,7 @@ def create_vnet(duthost, localhost):
     assert ret == 0, msg
 
 
-def create_vnet_mapping_json(first_addr, entry_count):
+def create_vnet_mapping_json(first_addr, entry_count, vnetcount):
     file_name = "vnet_mapping_{}.json".format(first_addr)
 
     # generate config file
@@ -90,7 +111,8 @@ def create_vnet_mapping_json(first_addr, entry_count):
 
         mapping_id = 1
         while (mapping_id <= mapping_count):
-            file.write('"Vnet001:{}": {{'.format(create_mapping_address(first_addr, mapping_id)))
+            vnetid = (mapping_id % vnetcount) + 1
+            file.write('"Vnet{}:{}": {{'.format(vnetid, create_mapping_address(first_addr, mapping_id)))
             file.write('"routing_type":"vnet_encap",')
             file.write('"underlay_ip":"{}",'.format(create_mapping_target_address(first_addr, mapping_id)))
             file.write('"mac_address":"F9-22-83-99-22-A2"')
@@ -110,10 +132,10 @@ def create_vnet_mapping(duthost, localhost, first_addr):
 
     ret, msg = gnmi_set(duthost, localhost, [], update_list, [])
     logger.info("gnmi msg: %s", msg)
-    #assert ret == 0, msg
+    assert ret == 0, msg
 
     result = duthost.shell('docker exec -it gnmi ps -auxww | grep telemetry')
-    logger.info("gnmi service: {}".format(result['stdout']))
+    logger.warning("gnmi service: {}".format(result['stdout']))
 
 def create_qos(duthost, localhost):
     file_name = "qos.json"
@@ -137,7 +159,25 @@ def create_qos(duthost, localhost):
     assert ret == 0, msg
 
 
-def create_eni(duthost, localhost):
+def create_eni_id(id):
+    id_1 = id % 10
+    id_2 = (int(id / 10)) % 10
+    id_3 = (int(id / 100)) % 10
+    return "F4939FEFC{}{}{}".format(id_1, id_2, id_3)
+
+def create_eni_address(first_addr, id):
+    address_1 = id % 100
+    address_2 = (int(id / 100)) % 100
+    address_3 = (int(id / 10000)) % 100
+    return "{}.{}.{}.{}".format(first_addr+100, address_3, address_2, address_1)
+
+def create_eni_mac(id):
+    id_1 = id % 10
+    id_2 = (int(id / 10)) % 10
+    id_3 = (int(id / 100)) % 10
+    return "F4:93:9F:EF:C{}:{}{}".format(id_1, id_2, id_3)
+
+def create_eni(duthost, localhost, vnetcount):
     file_name = "eni.json"
     update_list = ["/sonic-db:APPL_DB/DASH_ENI_TABLE/:@%s" % (file_name)]
 
@@ -145,14 +185,21 @@ def create_eni(duthost, localhost):
     with open(file_name, 'w') as file:
         file.write("{")
 
-        file.write('"F4939FEFC47E": {')
-        file.write('"eni_id":"497f23d7-f0ac-4c99-a98f-59b470e8c7bd",')
-        file.write('"mac_address":"F4:93:9F:EF:C4:7E",')
-        file.write('"underlay_ip":"25.1.1.1",')
-        file.write('"admin_state":"enabled",')
-        file.write('"vnet":"Vnet001",')
-        file.write('"qos":"qos100"')
-        file.write('}')
+        vnet_id = 1
+        while (vnet_id <= vnetcount):
+            file.write('"{}": {{'.format(create_eni_id(vnet_id)))
+            file.write('"eni_id":"{}",'.format(uuid.uuid4()))
+            file.write('"mac_address":"{}",'.format(create_eni_mac(vnet_id)))
+            file.write('"underlay_ip":"{}",'.format(create_eni_address(25,vnet_id)))
+            file.write('"admin_state":"enabled",')
+            file.write('"vnet":"Vnet{}",'.format(vnet_id))
+            file.write('"qos":"qos100"')
+
+            if (vnet_id == vnetcount):
+                file.write('}')
+            else:
+                file.write('},')
+            vnet_id += 1
 
         file.write("}")
 
@@ -160,7 +207,7 @@ def create_eni(duthost, localhost):
     logger.info("gnmi msg: %s", msg)
     assert ret == 0, msg
 
-def create_vnet_route_json(first_addr, entry_count):
+def create_vnet_route_json(first_addr, entry_count, vnetcount):
     file_name = "vnetroute_{}.json".format(first_addr)
 
     # generate config file
@@ -170,9 +217,10 @@ def create_vnet_route_json(first_addr, entry_count):
 
         route_id = 1
         while (route_id < route_count + 1):
-            file.write('"F4939FEFC47E:{}": {{'.format(create_route_address(first_addr, route_id)))
+            vnetid = (route_id % vnetcount) + 1
+            file.write('"{}:{}": {{'.format(create_eni_id(vnetid), create_route_address(first_addr, route_id)))
             file.write('"action_type": "vnet",')
-            file.write('"vnet": "Vnet001"')
+            file.write('"vnet": "Vnet{}"'.format(vnetid))
             if (route_id == route_count):
                 file.write('}')
             else:
@@ -197,11 +245,13 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
     '''
     duthost = duthosts[rand_one_dut_hostname]
 
-    create_appliance(duthost, localhost)
-    create_vnet(duthost, localhost)
+    appliancecount = 1000
+    vnetcount = 1000
+    create_appliance(duthost, localhost, appliancecount)
+    create_vnet(duthost, localhost, vnetcount)
 
     # test3
-    entry_count = 8000
+    entry_count = 1000
     batch_count = 1
 
     # test2
@@ -216,7 +266,7 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
     time.sleep(10)
     first_addr = 1
     while (first_addr <= batch_count):
-        create_vnet_mapping_json(first_addr + 10, entry_count)
+        create_vnet_mapping_json(first_addr + 10, entry_count, vnetcount)
         first_addr += 1
 
     first_addr = 1
@@ -224,31 +274,34 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
         create_vnet_mapping(duthost, localhost, first_addr + 10)
         first_addr += 1
 
-    '''
+
     create_qos(duthost, localhost)
-    create_eni(duthost, localhost)
+    create_eni(duthost, localhost, vnetcount)
 
     # wait depency data ready
-    #time.sleep(10)
+    time.sleep(10)
 
     # test3
-    #entry_count = 30000
-    #batch_count = 1
+    entry_count = 1
+    batch_count = 1
 
     # test2
     #entry_count = 1000
     #batch_count = 30
 
     # test1
-    entry_count = 5000
-    batch_count = 6
+    #entry_count = 5000
+    #batch_count = 6
     first_addr = 1
     while (first_addr <= batch_count):
-        create_vnet_route_json(first_addr + 10, entry_count)
+        create_vnet_route_json(first_addr + 10, entry_count, vnetcount)
         first_addr += 1
 
-    first_addr = 1
-    while (first_addr <= batch_count):
-        create_vnet_route(duthost, localhost, first_addr + 10)
-        first_addr += 1
-    '''
+    send = 1
+    while (send <= 10):
+        send += 1
+        first_addr = 1
+        while (first_addr <= batch_count):
+            create_vnet_route(duthost, localhost, first_addr + 10)
+            first_addr += 1
+
