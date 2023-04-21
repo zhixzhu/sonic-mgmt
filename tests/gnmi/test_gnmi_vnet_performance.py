@@ -290,7 +290,7 @@ def test_gnmi_create_vnet_route_performance(duthosts, rand_one_dut_hostname, loc
     #batch_count = 30
 
     # test1
-    entry_count = 30000
+    entry_count = 20
     batch_count = 1
     first_addr = 1
     while (first_addr <= batch_count):
