@@ -2768,6 +2768,10 @@ class SharedResSizeTest(sai_base_test.ThriftInterfaceDataPlane):
             self.packet_size = 64
             self.cell_size = 350
 
+        pkts_num_egr_mem = None
+        if 'pkts_num_egr_mem' in self.test_params:
+            pkts_num_egr_mem = int(self.test_params['pkts_num_egr_mem'])
+
         self.dst_port_macs = [self.dataplane.get_mac(
             0, ptid) for ptid in self.dst_port_ids]
         self.src_port_macs = [self.dataplane.get_mac(
@@ -2873,7 +2877,7 @@ class SharedResSizeTest(sai_base_test.ThriftInterfaceDataPlane):
                 sys.stderr.flush()
                 if 'cisco-8000' in self.asic_type:
                     assert (fill_leakout_plus_one(self, src_port_id,
-                                                  dst_port_id, pkt, queue, self.asic_type))
+                                                  dst_port_id, pkt, queue, self.asic_type, pkts_num_egr_mem))
                     pkt_count -= 1  # leakout adds 1 packet, subtract from current iteration
 
                 send_packet(self, src_port_id, pkt, pkt_count)

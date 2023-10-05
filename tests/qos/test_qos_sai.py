@@ -788,6 +788,9 @@ class TestQosSai(QosSaiBase):
         else:
             testParams["platform_asic"] = None
 
+        if "pkts_num_egr_mem" in qosConfig:
+            testParams["pkts_num_egr_mem"] = qosConfig["pkts_num_egr_mem"]
+
         if "packet_size" in qosConfig[sharedResSizeKey]:
             testParams["packet_size"] = qosConfig[sharedResSizeKey]["packet_size"]
 
