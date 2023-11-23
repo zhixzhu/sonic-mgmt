@@ -2058,3 +2058,33 @@ class TestQosSai(QosSaiBase):
             ptfhost, testCase="sai_qos_tests.QWatermarkAllPortTest",
             testParams=testParams
         )
+
+    @pytest.mark.parametrize("wredProfile", ["wred_drop"])
+    def testQosSaiWredDrop(
+        self, wredProfile, ptfhost, dutTestParams, dutConfig, dutQosConfig,
+        get_src_dst_asic_and_duts
+    ):
+        """
+            Test QoS SAI WRED drop for lossy queues
+
+            Args:
+                wredProfile (pytest parameter): WRED profile
+                ptfhost (AnsibleHost): Packet Test Framework (PTF)
+                dutTestParams (Fixture, dict): DUT host test params
+                dutConfig (Fixture, dict): Map of DUT config containing dut
+                    interfaces, test port IDs, test port IPs, and test ports
+                dutQosConfig (Fixture, dict): Map containing DUT host QoS
+                    configuration
+
+            Returns:
+                None
+
+            Raises:
+                RunAnsibleModuleFail if ptf test fails
+        """
+        portSpeedCableLength = dutQosConfig["portSpeedCableLength"]
+
+        if dutTestParams['hwsku'] in self.BREAKOUT_SKUS and 'backend' not in dutTestParams['topo']:
+            qosConfig = dutQosConfig["param"][portSpeedCableLength]["breakout"]
+        else:
+            qosConfig = dutQosConfig["param"][portSpeedCableLength]
