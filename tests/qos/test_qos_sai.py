@@ -2059,16 +2059,14 @@ class TestQosSai(QosSaiBase):
             testParams=testParams
         )
 
-    @pytest.mark.parametrize("wredProfile", ["wred_drop"])
     def testQosSaiWredDrop(
-        self, wredProfile, ptfhost, dutTestParams, dutConfig, dutQosConfig,
+        self, ptfhost, dutTestParams, dutConfig, dutQosConfig,
         get_src_dst_asic_and_duts
     ):
         """
             Test QoS SAI WRED drop for lossy queues
 
             Args:
-                wredProfile (pytest parameter): WRED profile
                 ptfhost (AnsibleHost): Packet Test Framework (PTF)
                 dutTestParams (Fixture, dict): DUT host test params
                 dutConfig (Fixture, dict): Map of DUT config containing dut
@@ -2088,3 +2086,28 @@ class TestQosSai(QosSaiBase):
             qosConfig = dutQosConfig["param"][portSpeedCableLength]["breakout"]
         else:
             qosConfig = dutQosConfig["param"][portSpeedCableLength]
+        
+        self.updateTestPortIdIp(dutConfig, get_src_dst_asic_and_duts)
+        
+        testParams = dict()
+        testParams.update(dutTestParams["basicParams"])
+        testParams.update(qosConfig['wred_drop'])
+        testParams.update({
+            "dst_port_id": dutConfig["testPorts"]["dst_port_id"],
+            "dst_port_ip": dutConfig["testPorts"]["dst_port_ip"],
+            "src_port_id": dutConfig["testPorts"]["src_port_id"],
+            "src_port_ip": dutConfig["testPorts"]["src_port_ip"],
+            "src_port_vlan": dutConfig["testPorts"]["src_port_vlan"],
+            "pkts_num_leak_out": qosConfig["pkts_num_leak_out"],
+            "hwsku": dutTestParams['hwsku']
+        })
+        
+        # enable serviceability CLI
+        # config wred profile
+        # get json output of voq cgm profile and pass to testParams
+        
+        self.runPtfTest(
+            ptfhost, testCase="sai_qos_tests.WredDropTest", testParams=testParams
+        )
+        
+        # remove wred profile //after yield in function
