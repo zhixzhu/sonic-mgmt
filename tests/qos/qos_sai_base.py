@@ -2223,3 +2223,22 @@ class QosSaiBase(QosBase):
                 "This test is skipped since egress asic is cisco-8000 Q100.")
         yield
         return
+
+    def enable_serviceability_cli():
+        # Enable serviceability CLI
+        output = dst_asic.command(
+            "show platform npu voq cgm_profile -i Ethernet0 -t 0")['stdout']
+        if output.find("debug shell server for asic 0 is not running") != -1:
+            dst_asic.command("config platform cisco sdk-debug enable")
+        time.sleep(20)
+        output = dst_asic.command(
+            "show platform npu voq cgm_profile -i Ethernet0 -t 0")['stdout']
+        if output.find("debug shell server for asic 0 is not running") != -1:
+            time.sleep(300)
+        output = dst_asic.command(
+            "show platform npu voq cgm_profile -i Ethernet0 -t 0")['stdout']
+        if output.find("debug shell server for asic 0 is not running") != -1:
+            pytest.fail(
+                "This test failed since serviceabitliy CLI is not available")
+        yield
+        return
