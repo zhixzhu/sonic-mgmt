@@ -2157,3 +2157,79 @@ class TestQosSai(QosSaiBase):
             ptfhost, testCase="sai_qos_tests.QWatermarkAllPortTest",
             testParams=testParams
         )
+
+    @pytest.mark.parametrize(
+        "SmsMemoryProfile",
+        ["sms_memory_1", "sms_memory_2",
+         "sms_memory_3", "sms_memory_4"])
+    def testQosSaiSmsMemory(
+        self, SmsMemoryProfile, ptfhost, dutTestParams, dutConfig,
+            dutQosConfig, get_src_dst_asic_and_duts
+    ):
+        """
+            Test QoS SAI SMS memory usage for various voq mode configurations
+            Args:
+                SmsMemoryProfile (pytest parameter): SMS Memory Profile
+                ptfhost (AnsibleHost): Packet Test Framework (PTF)
+                dutTestParams (Fixture, dict): DUT host test params
+                dutConfig (Fixture, dict): Map of DUT config containing dut
+                    interfaces, test port IDs, test port IPs, configuration.
+                dutQosConfig (Fixture, dict): Map containing DUT host QoS
+                    configuration
+                get_src_dst_asic_and_duts(Fixture, dict): Map containing the
+                    src/dst asics, and duts.
+            Returns:
+                None
+            Raises:
+                RunAnsibleModuleFail if ptf test fails
+        """
+        if get_src_dst_asic_and_duts['single_asic_test']:
+            pytest.skip(
+                "SMS memory test is only for multi asic.")
+        portSpeedCableLength = dutQosConfig["portSpeedCableLength"]
+        if dutTestParams['hwsku'] in self.BREAKOUT_SKUS and 'backend' not in dutTestParams['topo']:
+            qosConfig = dutQosConfig["param"][portSpeedCableLength]["breakout"]
+        else:
+            qosConfig = dutQosConfig["param"][portSpeedCableLength]
+        self.updateTestPortIdIp(dutConfig, get_src_dst_asic_and_duts, qosConfig[SmsMemoryProfile])
+
+        src_dut_index = get_src_dst_asic_and_duts['src_dut_index']
+        src_asic_index = get_src_dst_asic_and_duts['src_asic_index']
+
+        testParams = dict()
+        testParams.update(dutTestParams["basicParams"])
+        all_src_ports = dutConfig["testPortIps"][src_dut_index][src_asic_index]
+        all_src_port_ids = list(all_src_ports.keys())
+        testParams.update(qosConfig[SmsMemoryProfile])
+        testParams.update({
+            "dst_port_id": dutConfig["testPorts"]["dst_port_id"],
+            "dst_port_ip": dutConfig["testPorts"]["dst_port_ip"],
+            "src_port_id": dutConfig["testPorts"]["src_port_id"],
+            "src_port_ip": dutConfig["testPorts"]["src_port_ip"],
+            "src_port_1_id": all_src_port_ids[0],
+            "src_port_1_ip": all_src_ports[all_src_port_ids[0]]['peer_addr'],
+            "src_port_2_id": all_src_port_ids[1],
+            "src_port_2_ip":  all_src_ports[all_src_port_ids[1]]['peer_addr'],
+            "pkts_num_leak_out": qosConfig["pkts_num_leak_out"],
+            "src_duthost": get_src_dst_asic_and_duts['src_dut'],
+            "dst_duthost": get_src_dst_asic_and_duts['dst_dut'],
+        })
+
+        if "platform_asic" in dutTestParams["basicParams"]:
+            testParams["platform_asic"] = \
+                dutTestParams["basicParams"]["platform_asic"]
+        else:
+            testParams["platform_asic"] = None
+
+        if "pkts_num_margin" in qosConfig[SmsMemoryProfile].keys():
+            testParams["pkts_num_margin"] = \
+                qosConfig[SmsMemoryProfile]["pkts_num_margin"]
+
+        if "packet_size" in qosConfig[SmsMemoryProfile].keys():
+            testParams["packet_size"] = \
+                qosConfig[SmsMemoryProfile]["packet_size"]
+
+        self.runPtfTest(
+            ptfhost, testCase="sai_qos_tests.SmsMemorytest",
+            testParams=testParams
+        )

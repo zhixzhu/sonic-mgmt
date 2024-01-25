@@ -12,6 +12,7 @@ import sys
 import texttable
 import math
 import os
+import re
 from ptf.testutils import (ptf_ports,
                            dp_poll,
                            simple_arp_packet,
@@ -5413,3 +5414,170 @@ class QWatermarkAllPortTest(sai_base_test.ThriftInterfaceDataPlane):
 
         finally:
             self.sai_thrift_port_tx_enable(self.dst_client, asic_type, dst_port_ids)
+
+
+class SmsMemorytest(sai_base_test.ThriftInterfaceDataPlane):
+    def runTest(self):
+        time.sleep(5)
+        switch_init(self.clients)
+
+        # Parse input parameters
+        dscp = int(self.test_params['dscp'])
+        ecn = int(self.test_params['ecn'])
+        router_mac = self.test_params['router_mac']
+        sonic_version = self.test_params['sonic_version']
+        cli_pg = int(self.test_params['pg'])
+        # The pfc counter index starts from index 2 in sai_thrift_read_port_counters
+        pg = cli_pg + 2
+        dst_port_id = int(self.test_params['dst_port_id'])
+        dst_port_ip = self.test_params['dst_port_ip']
+        dst_port_mac = self.dataplane.get_mac(0, dst_port_id)
+        src_port_1_id = int(self.test_params['src_port_1_id'])
+        src_port_2_id = int(self.test_params['src_port_2_id'])
+        num_of_flows = self.test_params['num_of_flows']
+        asic_type = self.test_params['sonic_asic_type']
+        pkts_num_leak_out = int(self.test_params['pkts_num_leak_out'])
+        pkts_num_trig_pfc = int(self.test_params['pkts_num_trig_pfc'])
+        cell_size = int(self.test_params['cell_size'])
+        src_duthost = self.test_params['src_duthost']
+        dst_duthost = self.test_params['dst_duthost']
+
+        pkt_dst_mac = router_mac if router_mac != '' else dst_port_mac
+        # get counter names to query
+        ingress_counters, egress_counters = get_counter_names(sonic_version)
+
+        # Prepare IP packet data
+        ttl = 64
+        if 'packet_size' in self.test_params.keys():
+            packet_length = int(self.test_params['packet_size'])
+        else:
+            packet_length = 64
+        cell_per_pkt = math.ceil(packet_length/cell_size)
+        src_details = []
+        src_details.append((
+            int(self.test_params['src_port_1_id']),
+            self.test_params['src_port_1_ip'],
+            self.dataplane.get_mac(0, int(self.test_params['src_port_1_id']))))
+        src_details.append((
+            int(self.test_params['src_port_2_id']),
+            self.test_params['src_port_2_ip'],
+            self.dataplane.get_mac(0, int(self.test_params['src_port_2_id']))))
+
+        all_pkts = get_multiple_flows(
+                self,
+                pkt_dst_mac,
+                dst_port_id,
+                dst_port_ip,
+                None,
+                dscp,
+                ecn,
+                ttl,
+                packet_length,
+                src_details,
+                packets_per_port=2)
+
+        # get a snapshot of counter values at recv and transmit ports
+        def collect_counters():
+            counter_details = []
+            for src_tuple in src_details:
+                counter_details.append(sai_thrift_read_port_counters(
+                    self.src_client, asic_type, port_list['src'][src_tuple[0]]))
+            counter_details.append(sai_thrift_read_port_counters(
+                self.dst_client, asic_type, port_list['dst'][dst_port_id]))
+            return counter_details
+        counter_details_before = collect_counters()
+
+        # Add slight tolerance in threshold characterization to consider
+        # the case that cpu puts packets in the egress queue after we pause the egress
+        # or the leak out is simply less than expected as we have occasionally observed
+        if 'pkts_num_margin' in self.test_params.keys():
+            margin = int(self.test_params['pkts_num_margin'])
+        else:
+            margin = 2
+
+        self.sai_thrift_port_tx_disable(self.dst_client, asic_type, [dst_port_id])
+        try:
+            fill_leakout_plus_one(
+                self, src_port_1_id, dst_port_id, all_pkts[src_port_1_id][0][0],
+                cli_pg, asic_type)
+            fill_leakout_plus_one(
+                self, src_port_2_id,
+                dst_port_id, all_pkts[src_port_2_id][0][0], cli_pg, asic_type)
+
+            # send packets short of triggering pfc
+            # Send 1 less packet due to leakout filling
+            npkts = pkts_num_leak_out + \
+                (pkts_num_trig_pfc // num_of_flows) - 2 - margin
+            print("Sending {} flows, {} packets".format(num_of_flows * 2, npkts))
+            for src_id in all_pkts.keys():
+                for pkt_tuple in all_pkts[src_id]:
+                    send_packet(self, src_id, pkt_tuple[0], npkts)
+
+            # allow enough time for counters to update
+            time.sleep(2)
+
+            # get a snapshot of counter values at recv and transmit ports
+            # queue counters value is not of our interest here
+            counter_details_after = collect_counters()
+
+            for i in range(2):
+                # recv port no pfc
+                pfc_txd = counter_details_after[i][0][pg] - counter_details_before[i][0][pg]
+                assert pfc_txd == 0, \
+                    "Unexpected PFC TX {} on port {} for pg:{}".format(
+                        pfc_txd, src_details[i][0], pg-2)
+                # recv port no ingress drop
+                for cntr in ingress_counters:
+                    diff = counter_details_after[i][0][cntr] - counter_details_before[i][0][cntr]
+                    assert diff == 0, "Unexpected ingress drop {} on port {}".format(diff, src_details[i])
+
+            # xmit port no egress drop
+            for cntr in egress_counters:
+                diff = counter_details_after[2][0][cntr] - counter_details_before[2][0][cntr]
+                assert diff == 0, "Unexpected egress drops {} on port {}".format(diff, dst_port_id)
+
+            # keep sending packets until pfc is triggerred
+            npkts = 100
+            print("Keep sending {} packets until pfc is triggered".format(npkts))
+            pfc_is_triggered = [False, False]
+            src_port_ids = [src_port_1_id, src_port_2_id]
+            while False in pfc_is_triggered:
+                for i in range(2):
+                    if not pfc_is_triggered[i]:
+                        for pkt_tuple in all_pkts[src_port_ids[i]]:
+                            send_packet(self, src_id, pkt_tuple[0], npkts)
+
+                # allow enough time for counters to update
+                time.sleep(2)
+                # get a snapshot of counter values at recv and transmit ports
+                # queue counters value is not of our interest here
+                counter_details_3 = collect_counters()
+
+                for i in range(2):
+                    # recv port Starts PFC:
+                    pfc_txd = counter_details_3[i][0][pg] - counter_details_before[i][0][pg]
+                    if pfc_txd > 0:
+                        pfc_is_triggered[i] = True
+
+            # Check SMS usage on both ingress and egress asic
+            xoff_threshold_cell = cell_per_pkt * pkts_num_trig_pfc
+            expected_cell_occupation = xoff_threshold_cell * 2 * num_of_flows
+            sqg_file = "sqg.py"
+            duthosts=[src_duthost, dst_duthost]
+            sqg_cell_sum = 0
+            for duthost in set(duthosts):
+                duthost.copy(
+                    src="common/helpers/{}".format(sqg_file),
+                    dest="./"
+                    )
+                cmd = "python3 {}".format(sqg_file)
+                output = duthost.command(cmd)['stdout'].strip()
+                matchObj = re.search(r"SQG summary for all asics: ([a-z0-9]+)", output, re.M)
+                if matchObj:
+                    sqg_ctr = matchObj.group(1)
+                sqg_cell_sum += int(sqg_ctr)
+                assert abs(sqg_cell_sum - expected_cell_occupation) > expected_cell_occupation * 0.1, "sqg_cell_sum {} divert from expected_cell_occupation {}".format(
+                    sqg_cell_sum, expected_cell_occupation)
+
+        finally:
+            self.sai_thrift_port_tx_enable(self.dst_client, asic_type, [dst_port_id])
